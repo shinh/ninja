@@ -1112,13 +1112,30 @@ int real_main(int argc, char** argv) {
   for (int cycle = 1; cycle <= kCycleLimit; ++cycle) {
     NinjaMain ninja(ninja_command, config);
 
-    RealFileReader file_reader;
-    ManifestParser parser(&ninja.state_, &file_reader,
-                          options.dupe_edges_should_err);
     string err;
-    if (!parser.Load(options.input_file, &err)) {
-      Error("%s", err.c_str());
-      return 1;
+    FILE* fp = fopen("ninja_state", "rb");
+    bool ok = false;
+    if (fp) {
+      if (ninja.state_.Deserialize(fp)) {
+        ok = true;
+      } else {
+        fprintf(stderr, "failed to deserialize!\n");
+        abort();
+      }
+    }
+
+    if (!ok) {
+      RealFileReader file_reader;
+      ManifestParser parser(&ninja.state_, &file_reader,
+                            options.dupe_edges_should_err);
+      if (!parser.Load(options.input_file, &err)) {
+        Error("%s", err.c_str());
+        return 1;
+      }
+
+      FILE* fp = fopen("ninja_state", "wb");
+      ninja.state_.Serialize(fp);
+      fclose(fp);
     }
 
     if (options.tool && options.tool->when == Tool::RUN_AFTER_LOAD)

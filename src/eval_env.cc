@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <assert.h>
+#include <stdio.h>
 
 #include "eval_env.h"
 
@@ -100,8 +101,14 @@ string EvalString::Evaluate(Env* env) const {
   for (TokenList::const_iterator i = parsed_.begin(); i != parsed_.end(); ++i) {
     if (i->second == RAW)
       result.append(i->first);
-    else
+    else {
+#if 0
+      if (i->first == "root") {
+        fprintf(stderr, "lookup %s=%s env=%p\n", i->first.c_str(), env->LookupVariable(i->first).c_str(), env);
+      }
+#endif
       result.append(env->LookupVariable(i->first));
+    }
   }
   return result;
 }
@@ -129,4 +136,90 @@ string EvalString::Serialize() const {
     result.append("]");
   }
   return result;
+}
+
+namespace {
+
+void SerializeInt(FILE* fp, int v) {
+  size_t r = fwrite(&v, sizeof(v), 1, fp);
+  assert(r == 1);
+}
+
+void SerializeString(FILE* fp, StringPiece s) {
+  SerializeInt(fp, s.len_);
+  size_t r = fwrite(s.str_, 1, s.len_, fp);
+  assert(r == s.len_);
+}
+
+int DeserializeInt(FILE* fp) {
+  int v;
+  size_t r = fread(&v, sizeof(v), 1, fp);
+  if (r != 1)
+    return -1;
+  return v;
+}
+
+bool DeserializeString(FILE* fp, string* s) {
+  int len = DeserializeInt(fp);
+  if (len < 0)
+    return false;
+  s->resize(len);
+  size_t r = fread(&(*s)[0], 1, s->size(), fp);
+  if (r != s->size())
+    return false;
+  return true;
+}
+
+}
+
+void EvalString::Serialize2(FILE* fp) const {
+  SerializeInt(fp, parsed_.size());
+  for (TokenList::const_iterator i = parsed_.begin();
+       i != parsed_.end(); ++i) {
+    SerializeString(fp, i->first);
+    SerializeInt(fp, i->second);
+  }
+}
+
+bool EvalString::Deserialize(FILE* fp) {
+  int size = DeserializeInt(fp);
+  if (size < 0)
+    return false;
+  string s;
+  for (int i = 0; i < size; i++) {
+    if (!DeserializeString(fp, &s))
+      return false;
+    int type = DeserializeInt(fp);
+    if (type != RAW && type != SPECIAL)
+      return false;
+    //fprintf(stderr, "%d %s(%d)\n", i, s.c_str(), type);
+    parsed_.push_back(make_pair(s, static_cast<TokenType>(type)));
+  }
+  return true;
+}
+
+void BindingEnv::Serialize(FILE* fp) const {
+  SerializeInt(fp, bindings_.size());
+  for (map<string, string>::const_iterator it = bindings_.begin();
+       it != bindings_.end(); ++it) {
+    SerializeString(fp, it->first);
+    SerializeString(fp, it->second);
+  }
+}
+
+bool BindingEnv::Deserialize(FILE* fp) {
+  int bindings_size = DeserializeInt(fp);
+  if (bindings_size < 0)
+    return false;
+  string k, v;
+  for (int i = 0; i < bindings_size; ++i) {
+    if (!DeserializeString(fp, &k))
+      return false;
+    if (!DeserializeString(fp, &v))
+      return false;
+    //fprintf(stderr, "binding %s=%s %p\n", k.c_str(), v.c_str(), this);
+    if (!bindings_.insert(make_pair(k, v)).second)
+      return false;
+  }
+  return true;
 }

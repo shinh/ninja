@@ -15,6 +15,7 @@
 #ifndef NINJA_STATE_H_
 #define NINJA_STATE_H_
 
+#include <stdio.h>
 #include <map>
 #include <set>
 #include <string>
@@ -107,6 +108,9 @@ struct State {
 
   /// Dump the nodes and Pools (useful for debugging).
   void Dump();
+
+  void Serialize(FILE* fp) const;
+  bool Deserialize(FILE* fp);
 
   /// @return the root node(s) of the graph. (Root nodes have no output edges).
   /// @param error where to write the error message if somethings went wrong.

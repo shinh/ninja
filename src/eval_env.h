@@ -45,6 +45,9 @@ struct EvalString {
   /// for use in tests.
   string Serialize() const;
 
+  void Serialize2(FILE* fp) const;
+  bool Deserialize(FILE* fp);
+
 private:
   enum TokenType { RAW, SPECIAL };
   typedef vector<pair<string, TokenType> > TokenList;
@@ -63,12 +66,13 @@ struct Rule {
 
   const EvalString* GetBinding(const string& key) const;
 
+  typedef map<string, EvalString> Bindings;
+  const Bindings& bindings() const { return bindings_; }
  private:
   // Allow the parsers to reach into this object and fill out its fields.
   friend struct ManifestParser;
 
   string name_;
-  typedef map<string, EvalString> Bindings;
   Bindings bindings_;
 };
 
@@ -95,6 +99,11 @@ struct BindingEnv : public Env {
   /// This function takes as parameters the necessary info to do (2).
   string LookupWithFallback(const string& var, const EvalString* eval,
                             Env* env);
+
+  void Serialize(FILE* fp) const;
+  bool Deserialize(FILE* fp);
+  const BindingEnv* parent() const { return parent_; }
+  void set_parent(BindingEnv* p) { parent_ = p; }
 
 private:
   map<string, string> bindings_;

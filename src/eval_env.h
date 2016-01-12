@@ -22,7 +22,11 @@ using namespace std;
 
 #include "string_piece.h"
 
+#define USE_STRING_PIECE
+
 struct Rule;
+class Deserializer;
+class Serializer;
 
 /// An interface for a scope for variable (e.g. "$foo") lookups.
 struct Env {
@@ -45,12 +49,17 @@ struct EvalString {
   /// for use in tests.
   string Serialize() const;
 
-  void Serialize2(FILE* fp) const;
-  bool Deserialize(FILE* fp);
+  void Serialize2(Serializer* serializer) const;
+  bool Deserialize(Deserializer* deserializer);
 
 private:
   enum TokenType { RAW, SPECIAL };
+#ifdef USE_STRING_PIECE
+  vector<string> buf_;
+  typedef vector<pair<StringPiece, TokenType> > TokenList;
+#else
   typedef vector<pair<string, TokenType> > TokenList;
+#endif
   TokenList parsed_;
 };
 
@@ -100,8 +109,8 @@ struct BindingEnv : public Env {
   string LookupWithFallback(const string& var, const EvalString* eval,
                             Env* env);
 
-  void Serialize(FILE* fp) const;
-  bool Deserialize(FILE* fp);
+  void Serialize(Serializer* serializer) const;
+  bool Deserialize(Deserializer* deserializer);
   const BindingEnv* parent() const { return parent_; }
   void set_parent(BindingEnv* p) { parent_ = p; }
 

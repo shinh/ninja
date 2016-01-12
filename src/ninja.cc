@@ -41,6 +41,7 @@
 #include "graphviz.h"
 #include "manifest_parser.h"
 #include "metrics.h"
+#include "serializer.h"
 #include "state.h"
 #include "util.h"
 #include "version.h"
@@ -1116,7 +1117,8 @@ int real_main(int argc, char** argv) {
     FILE* fp = fopen("ninja_state", "rb");
     bool ok = false;
     if (fp) {
-      if (ninja.state_.Deserialize(fp)) {
+      Deserializer deserializer(fp);
+      if (ninja.state_.Deserialize(&deserializer)) {
         ok = true;
       } else {
         fprintf(stderr, "failed to deserialize!\n");
@@ -1134,8 +1136,8 @@ int real_main(int argc, char** argv) {
       }
 
       FILE* fp = fopen("ninja_state", "wb");
-      ninja.state_.Serialize(fp);
-      fclose(fp);
+      Serializer serializer(fp);
+      ninja.state_.Serialize(&serializer);
     }
 
     if (options.tool && options.tool->when == Tool::RUN_AFTER_LOAD)

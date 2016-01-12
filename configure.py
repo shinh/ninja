@@ -487,6 +487,7 @@ for name in ['build',
              'line_printer',
              'manifest_parser',
              'metrics',
+             'serializer',
              'state',
              'util',
              'version']:

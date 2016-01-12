@@ -28,6 +28,8 @@ using namespace std;
 struct Edge;
 struct Node;
 struct Rule;
+class Deserializer;
+class Serializer;
 
 /// A pool for delayed edges.
 /// Pools are scoped to a State. Edges within a State will share Pools. A Pool
@@ -109,8 +111,8 @@ struct State {
   /// Dump the nodes and Pools (useful for debugging).
   void Dump();
 
-  void Serialize(FILE* fp) const;
-  bool Deserialize(FILE* fp);
+  void Serialize(Serializer* serializer) const;
+  bool Deserialize(Deserializer* deserializer);
 
   /// @return the root node(s) of the graph. (Root nodes have no output edges).
   /// @param error where to write the error message if somethings went wrong.

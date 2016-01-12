@@ -20,8 +20,8 @@
 #include "edit_distance.h"
 #include "graph.h"
 #include "metrics.h"
+#include "serializer.h"
 #include "util.h"
-
 
 void Pool::EdgeScheduled(const Edge& edge) {
   if (depth_ != 0)
@@ -208,52 +208,16 @@ void State::Dump() {
   }
 }
 
-namespace {
-
-void SerializeInt(FILE* fp, int v) {
-  size_t r = fwrite(&v, sizeof(v), 1, fp);
-  if (r != 1)
-    abort();
-}
-
-void SerializeString(FILE* fp, StringPiece s) {
-  SerializeInt(fp, s.len_);
-  size_t r = fwrite(s.str_, 1, s.len_, fp);
-  if (r != s.len_)
-    abort();
-}
-
-int DeserializeInt(FILE* fp) {
-  int v;
-  size_t r = fread(&v, sizeof(v), 1, fp);
-  if (r != 1)
-    return -1;
-  return v;
-}
-
-bool DeserializeString(FILE* fp, string* s) {
-  int len = DeserializeInt(fp);
-  if (len < 0)
-    return false;
-  s->resize(len);
-  size_t r = fread(&(*s)[0], 1, s->size(), fp);
-  if (r != s->size())
-    return false;
-  return true;
-}
-
-}
-
-void State::Serialize(FILE* fp) const {
+void State::Serialize(Serializer* serializer) const {
   METRIC_RECORD("serialize");
 
   map<const Pool*, int> pool_ids;
-  SerializeInt(fp, pools_.size());
+  serializer->SerializeInt(pools_.size());
   for (map<string, Pool*>::const_iterator it = pools_.begin();
        it != pools_.end(); ++it) {
     const Pool* pool = it->second;
-    SerializeString(fp, pool->name());
-    SerializeInt(fp, pool->depth());
+    serializer->SerializeString(pool->name());
+    serializer->SerializeInt(pool->depth());
     pool_ids.insert(make_pair(pool, pool_ids.size()));
   }
 
@@ -268,38 +232,38 @@ void State::Serialize(FILE* fp) const {
     }
   }
 
-  SerializeInt(fp, bindings.size());
+  serializer->SerializeInt(bindings.size());
   for (size_t i = 0; i < bindings.size(); i++) {
-    bindings[i]->Serialize(fp);
+    bindings[i]->Serialize(serializer);
   }
   for (size_t i = 0; i < bindings.size(); i++) {
     const BindingEnv* parent = bindings[i]->parent();
     if (parent) {
       //fprintf(stderr, "id=%d parent_id=%d %p %p\n", i, binding_ids[parent], bindings[i], parent);
-      SerializeInt(fp, binding_ids[parent] + 1);
+      serializer->SerializeInt(binding_ids[parent] + 1);
     } else {
-      SerializeInt(fp, 0);
+      serializer->SerializeInt(0);
     }
   }
 
-  SerializeInt(fp, paths_.size());
+  serializer->SerializeInt(paths_.size());
   int node_id = 0;
   for (Paths::const_iterator it = paths_.begin(); it != paths_.end(); ++it) {
     Node* node = it->second;
-    SerializeString(fp, node->path());
-    SerializeInt(fp, node->slash_bits());
-    //SerializeInt(fp, node->id());
+    serializer->SerializeString(node->path());
+    serializer->SerializeInt(node->slash_bits());
+    //serializer->SerializeInt(node->id());
     node->set_id(node_id++);
   }
 
   vector<const Rule*> rules;
   map<const Rule*, int> rule_ids;
-  SerializeInt(fp, edges_.size());
+  serializer->SerializeInt(edges_.size());
   for (size_t i = 0; i < edges_.size(); ++i) {
     const Edge* edge = edges_[i];
 
     if (edge->is_phony()) {
-      SerializeInt(fp, 0);
+      serializer->SerializeInt(0);
     } else {
       const Rule* rule = edge->rule_;
       int rule_id = rule_ids.size();
@@ -308,73 +272,75 @@ void State::Serialize(FILE* fp) const {
       if (p.second) {
         // New rule.
         rules.push_back(rule);
-        SerializeInt(fp, 1);
+        serializer->SerializeInt(1);
 
-        SerializeString(fp, rule->name());
+        serializer->SerializeString(rule->name());
 
         const Rule::Bindings& bindings = rule->bindings();
-        SerializeInt(fp, bindings.size());
+        serializer->SerializeInt(bindings.size());
         for (Rule::Bindings::const_iterator it = bindings.begin();
              it != bindings.end(); ++it) {
-          SerializeString(fp, it->first);
-          it->second.Serialize2(fp);
+          serializer->SerializeString(it->first);
+          it->second.Serialize2(serializer);
         }
       } else {
-        SerializeInt(fp, p.first->second + 2);
+        serializer->SerializeInt(p.first->second + 2);
       }
     }
 
     map<const Pool*, int>::const_iterator found = pool_ids.find(edge->pool_);
     if (found == pool_ids.end())
       abort();
-    SerializeInt(fp, found->second);
+    serializer->SerializeInt(found->second);
 
-    SerializeInt(fp, edge->inputs_.size());
+    serializer->SerializeInt(edge->inputs_.size());
     for (size_t i = 0; i < edge->inputs_.size(); ++i) {
-      SerializeInt(fp, edge->inputs_[i]->id());
+      serializer->SerializeInt(edge->inputs_[i]->id());
     }
 
-    SerializeInt(fp, edge->outputs_.size());
+    serializer->SerializeInt(edge->outputs_.size());
     for (size_t i = 0; i < edge->outputs_.size(); ++i) {
-      SerializeInt(fp, edge->outputs_[i]->id());
+      serializer->SerializeInt(edge->outputs_[i]->id());
     }
 
-    SerializeInt(fp, edge->implicit_deps_);
-    SerializeInt(fp, edge->order_only_deps_);
+    serializer->SerializeInt(edge->implicit_deps_);
+    serializer->SerializeInt(edge->order_only_deps_);
 
     if (!edge->env_)
       abort();
 #if 0
-    edge->env_->Serialize(fp);
+    edge->env_->Serialize(serializer);
 #endif
-    SerializeInt(fp, binding_ids[edge->env_]);
+    serializer->SerializeInt(binding_ids[edge->env_]);
   }
 
-  SerializeInt(fp, defaults_.size());
+  serializer->SerializeInt(defaults_.size());
   for (size_t i = 0; i < defaults_.size(); ++i) {
-    SerializeInt(fp, defaults_[i]->id());
+    serializer->SerializeInt(defaults_[i]->id());
   }
 
   for (Paths::const_iterator it = paths_.begin(); it != paths_.end(); ++it) {
     it->second->set_id(-1);
   }
+
+  serializer->Close();
 }
 
-bool State::Deserialize(FILE* fp) {
+bool State::Deserialize(Deserializer* deserializer) {
   METRIC_RECORD("deserialize");
   string buf;
 
   vector<Pool*> pools;
-  int pool_size = DeserializeInt(fp);
+  int pool_size = deserializer->DeserializeInt();
   if (pool_size < 0)
     return false;
 
   {
     METRIC_RECORD("deserialize pool");
     for (int i = 0; i < pool_size; i++) {
-      if (!DeserializeString(fp, &buf))
+      if (!deserializer->DeserializeString(&buf))
         return false;
-      int depth = DeserializeInt(fp);
+      int depth = deserializer->DeserializeInt();
       if (depth < 0)
         return false;
 
@@ -391,19 +357,19 @@ bool State::Deserialize(FILE* fp) {
 #endif
 
   vector<BindingEnv*> bindings;
-  int bindings_size = DeserializeInt(fp);
+  int bindings_size = deserializer->DeserializeInt();
   if (bindings_size < 0)
     return false;
   {
     METRIC_RECORD("deserialize bindings");
     for (int i = 0; i < bindings_size; i++) {
       BindingEnv* b = i ? new BindingEnv() : &bindings_;
-      if (!b->Deserialize(fp))
+      if (!b->Deserialize(deserializer))
         return false;
       bindings.push_back(b);
     }
     for (int i = 0; i < bindings_size; i++) {
-      int parent_id = DeserializeInt(fp);
+      int parent_id = deserializer->DeserializeInt();
       if (parent_id < 0)
         return false;
       if (parent_id) {
@@ -420,15 +386,15 @@ bool State::Deserialize(FILE* fp) {
 
   vector<Node*> nodes;
   {
-    METRIC_RECORD("deserialize nodes");
-    int path_size = DeserializeInt(fp);
+    int path_size = deserializer->DeserializeInt();
     if (path_size < 0)
       return false;
     for (int i = 0; i < path_size; ++i) {
-      if (!DeserializeString(fp, &buf))
+      METRIC_RECORD("deserialize nodes");
+      if (!deserializer->DeserializeString(&buf))
         return false;
       //fprintf(stderr, "node #%d %s\n", i, buf.c_str());
-      int slash_bits = DeserializeInt(fp);
+      int slash_bits = deserializer->DeserializeInt();
       //fprintf(stderr, "node #%d %s %d\n", i, buf.c_str(), slash_bits);
       if (slash_bits < 0)
         return false;
@@ -443,17 +409,17 @@ bool State::Deserialize(FILE* fp) {
     fprintf(stderr, "node ok\n");
   }
 
-  int edge_size = DeserializeInt(fp);
+  int edge_size = deserializer->DeserializeInt();
   if (edge_size < 0)
     return false;
   vector<Rule*> rules;
   {
-    METRIC_RECORD("deserialize edges");
     for (int i = 0; i < edge_size; ++i) {
+      METRIC_RECORD("deserialize edges");
       Edge* edge = new Edge();
       edges_.push_back(edge);
 
-      int rule_id = DeserializeInt(fp);
+      int rule_id = deserializer->DeserializeInt();
       if (rule_id < 0)
         return false;
 
@@ -463,20 +429,21 @@ bool State::Deserialize(FILE* fp) {
         edge->rule_ = &kPhonyRule;
       } else if (rule_id == 1) {
         // New rule.
-        if (!DeserializeString(fp, &buf))
+        METRIC_RECORD("deserialize rule");
+        if (!deserializer->DeserializeString(&buf))
           return false;
         Rule* rule = new Rule(buf);
         edge->rule_ = rule;
         rules.push_back(rule);
 
-        int binding_size = DeserializeInt(fp);
+        int binding_size = deserializer->DeserializeInt();
         if (binding_size < 0)
           return false;
         for (int j = 0; j < binding_size; j++) {
-          if (!DeserializeString(fp, &buf))
+          if (!deserializer->DeserializeString(&buf))
             return false;
           EvalString es;
-          if (!es.Deserialize(fp))
+          if (!es.Deserialize(deserializer))
             return false;
           rule->AddBinding(buf, es);
         }
@@ -491,18 +458,18 @@ bool State::Deserialize(FILE* fp) {
 
       //fprintf(stderr, "edge #%d rule ok\n", i);
 
-      int pool_id = DeserializeInt(fp);
+      int pool_id = deserializer->DeserializeInt();
       if (pool_id < 0)
         return false;
       if (pool_id >= static_cast<int>(pools.size()))
         return false;
       edge->pool_ = pools[pool_id];
 
-      int input_size = DeserializeInt(fp);
+      int input_size = deserializer->DeserializeInt();
       if (input_size < 0)
         return false;
       for (int j = 0; j < input_size; j++) {
-        int input = DeserializeInt(fp);
+        int input = deserializer->DeserializeInt();
         if (input < 0)
           return false;
         // TODO: check.
@@ -511,11 +478,11 @@ bool State::Deserialize(FILE* fp) {
         edge->inputs_.push_back(node);
       }
 
-      int output_size = DeserializeInt(fp);
+      int output_size = deserializer->DeserializeInt();
       if (output_size < 0)
         return false;
       for (int j = 0; j < output_size; j++) {
-        int output = DeserializeInt(fp);
+        int output = deserializer->DeserializeInt();
         if (output < 0)
           return false;
         // TODO: check.
@@ -524,12 +491,12 @@ bool State::Deserialize(FILE* fp) {
         edge->outputs_.push_back(node);
       }
 
-      int implicit_deps = DeserializeInt(fp);
+      int implicit_deps = deserializer->DeserializeInt();
       if (implicit_deps < 0)
         return false;
       edge->implicit_deps_ = implicit_deps;
 
-      int order_only_deps = DeserializeInt(fp);
+      int order_only_deps = deserializer->DeserializeInt();
       if (order_only_deps < 0)
         return false;
       edge->order_only_deps_ = order_only_deps;
@@ -537,11 +504,11 @@ bool State::Deserialize(FILE* fp) {
 #if 0
       edge->env_ = new BindingEnv();
       fprintf(stderr, "binding=%p\n", edge->env_);
-      if (!edge->env_->Deserialize(fp))
+      if (!edge->env_->Deserialize(deserializer))
         return false;
 #endif
 
-      int binding_id = DeserializeInt(fp);
+      int binding_id = deserializer->DeserializeInt();
       if (binding_id < 0)
         return false;
       if (binding_id >= bindings.size())
@@ -551,11 +518,11 @@ bool State::Deserialize(FILE* fp) {
   }
   fprintf(stderr, "edge & rule ok\n");
 
-  int default_size = DeserializeInt(fp);
+  int default_size = deserializer->DeserializeInt();
   if (default_size < 0)
     return false;
   for (int i = 0; i < default_size; ++i) {
-    int node_id = DeserializeInt(fp);
+    int node_id = deserializer->DeserializeInt();
     if (node_id < 0)
       return false;
     defaults_.push_back(nodes[node_id]);

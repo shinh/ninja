@@ -84,8 +84,8 @@ void State::AddPool(Pool* pool) {
   pools_[pool->name()] = pool;
 }
 
-Pool* State::LookupPool(const string& pool_name) {
-  map<string, Pool*>::iterator i = pools_.find(pool_name);
+Pool* State::LookupPool(StringPiece pool_name) {
+  Pools::iterator i = pools_.find(pool_name);
   if (i == pools_.end())
     return NULL;
   return i->second;
@@ -198,7 +198,7 @@ void State::Dump() {
   }
   if (!pools_.empty()) {
     printf("resource_pools:\n");
-    for (map<string, Pool*>::const_iterator it = pools_.begin();
+    for (Pools::const_iterator it = pools_.begin();
          it != pools_.end(); ++it)
     {
       if (!it->second->name().empty()) {

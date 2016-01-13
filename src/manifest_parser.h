@@ -51,7 +51,7 @@ private:
   /// Parse various statement types.
   bool ParsePool(string* err);
   bool ParseRule(string* err);
-  bool ParseLet(string* key, EvalString* val, string* err);
+  bool ParseLet(StringPiece* key, EvalString* val, string* err);
   bool ParseEdge(string* err);
   bool ParseDefault(string* err);
 

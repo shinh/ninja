@@ -89,7 +89,7 @@ struct State {
   State();
 
   void AddPool(Pool* pool);
-  Pool* LookupPool(const string& pool_name);
+  Pool* LookupPool(StringPiece pool_name);
 
   Edge* AddEdge(const Rule* rule);
 
@@ -118,7 +118,8 @@ struct State {
   Paths paths_;
 
   /// All the pools used in the graph.
-  map<string, Pool*> pools_;
+  typedef ExternalStringHashMap<Pool*>::Type Pools;
+  Pools pools_;
 
   /// All the edges of the graph.
   vector<Edge*> edges_;

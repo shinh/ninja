@@ -16,16 +16,16 @@
 
 #include "eval_env.h"
 
-string BindingEnv::LookupVariable(const string& var) {
-  map<string, string>::iterator i = bindings_.find(var);
+string BindingEnv::LookupVariable(StringPiece var) {
+  Bindings::iterator i = bindings_.find(var);
   if (i != bindings_.end())
-    return i->second;
+    return i->second.AsString();
   if (parent_)
     return parent_->LookupVariable(var);
   return "";
 }
 
-void BindingEnv::AddBinding(const string& key, const string& val) {
+void BindingEnv::AddBinding(StringPiece key, StringPiece val) {
   bindings_[key] = val;
 }
 
@@ -34,15 +34,15 @@ void BindingEnv::AddRule(const Rule* rule) {
   rules_[rule->name()] = rule;
 }
 
-const Rule* BindingEnv::LookupRuleCurrentScope(const string& rule_name) {
-  map<string, const Rule*>::iterator i = rules_.find(rule_name);
+const Rule* BindingEnv::LookupRuleCurrentScope(StringPiece rule_name) {
+  Rules::iterator i = rules_.find(rule_name);
   if (i == rules_.end())
     return NULL;
   return i->second;
 }
 
-const Rule* BindingEnv::LookupRule(const string& rule_name) {
-  map<string, const Rule*>::iterator i = rules_.find(rule_name);
+const Rule* BindingEnv::LookupRule(StringPiece rule_name) {
+  Rules::iterator i = rules_.find(rule_name);
   if (i != rules_.end())
     return i->second;
   if (parent_)
@@ -50,11 +50,11 @@ const Rule* BindingEnv::LookupRule(const string& rule_name) {
   return NULL;
 }
 
-void Rule::AddBinding(const string& key, const EvalString& val) {
+void Rule::AddBinding(StringPiece key, const EvalString& val) {
   bindings_[key] = val;
 }
 
-const EvalString* Rule::GetBinding(const string& key) const {
+const EvalString* Rule::GetBinding(StringPiece key) const {
   Bindings::const_iterator i = bindings_.find(key);
   if (i == bindings_.end())
     return NULL;
@@ -62,7 +62,7 @@ const EvalString* Rule::GetBinding(const string& key) const {
 }
 
 // static
-bool Rule::IsReservedBinding(const string& var) {
+bool Rule::IsReservedBinding(StringPiece var) {
   return var == "command" ||
       var == "depfile" ||
       var == "description" ||
@@ -75,16 +75,16 @@ bool Rule::IsReservedBinding(const string& var) {
       var == "msvc_deps_prefix";
 }
 
-const map<string, const Rule*>& BindingEnv::GetRules() const {
+const BindingEnv::Rules& BindingEnv::GetRules() const {
   return rules_;
 }
 
-string BindingEnv::LookupWithFallback(const string& var,
+string BindingEnv::LookupWithFallback(StringPiece var,
                                       const EvalString* eval,
                                       Env* env) {
-  map<string, string>::iterator i = bindings_.find(var);
+  Bindings::iterator i = bindings_.find(var);
   if (i != bindings_.end())
-    return i->second;
+    return i->second.AsString();
 
   if (eval)
     return eval->Evaluate(env);
@@ -99,7 +99,7 @@ string EvalString::Evaluate(Env* env) const {
   string result;
   for (TokenList::const_iterator i = parsed_.begin(); i != parsed_.end(); ++i) {
     if (i->second == RAW)
-      result.append(i->first);
+      result.append(i->first.str_, i->first.len_);
     else
       result.append(env->LookupVariable(i->first));
   }
@@ -107,15 +107,11 @@ string EvalString::Evaluate(Env* env) const {
 }
 
 void EvalString::AddText(StringPiece text) {
-  // Add it to the end of an existing RAW token if possible.
-  if (!parsed_.empty() && parsed_.back().second == RAW) {
-    parsed_.back().first.append(text.str_, text.len_);
-  } else {
-    parsed_.push_back(make_pair(text.AsString(), RAW));
-  }
+  // XXX: Add it to the end of an existing RAW token if possible.
+  parsed_.push_back(make_pair(text, RAW));
 }
 void EvalString::AddSpecial(StringPiece text) {
-  parsed_.push_back(make_pair(text.AsString(), SPECIAL));
+  parsed_.push_back(make_pair(text, SPECIAL));
 }
 
 string EvalString::Serialize() const {
@@ -125,7 +121,7 @@ string EvalString::Serialize() const {
     result.append("[");
     if (i->second == SPECIAL)
       result.append("$");
-    result.append(i->first);
+    result.append(i->first.str_, i->first.len_);
     result.append("]");
   }
   return result;

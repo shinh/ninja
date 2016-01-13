@@ -33,13 +33,6 @@ struct StringPiece {
 
   StringPiece(const char* str, size_t len) : str_(str), len_(len) {}
 
-  bool operator==(const StringPiece& other) const {
-    return len_ == other.len_ && memcmp(str_, other.str_, len_) == 0;
-  }
-  bool operator!=(const StringPiece& other) const {
-    return !(*this == other);
-  }
-
   /// Convert the slice into a full-fledged std::string, copying the
   /// data into a new string.
   string AsString() const {
@@ -49,5 +42,12 @@ struct StringPiece {
   const char* str_;
   size_t len_;
 };
+
+inline bool operator==(const StringPiece& lhs, const StringPiece& rhs) {
+  return lhs.len_ == rhs.len_ && memcmp(lhs.str_, rhs.str_, lhs.len_) == 0;
+}
+inline bool operator!=(const StringPiece& lhs, const StringPiece& rhs) {
+  return !(lhs == rhs);
+}
 
 #endif  // NINJA_STRINGPIECE_H_

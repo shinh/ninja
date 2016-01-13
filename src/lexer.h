@@ -71,7 +71,7 @@ struct Lexer {
 
   /// Read a simple identifier (a rule or variable name).
   /// Returns false if a name can't be read.
-  bool ReadIdent(string* out);
+  bool ReadIdent(StringPiece* out);
 
   /// Read a path (complete with $escapes).
   /// Returns false only on error, returned path may be empty if a delimiter

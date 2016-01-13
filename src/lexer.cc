@@ -535,7 +535,7 @@ yy92:
   }
 }
 
-bool Lexer::ReadIdent(string* out) {
+bool Lexer::ReadIdent(StringPiece* out) {
   const char* p = ofs_;
   for (;;) {
     const char* start = p;
@@ -599,7 +599,8 @@ yy95:
 	goto yy100;
 yy96:
 	{
-      out->assign(start, p - start);
+      out->str_ = start;
+      out->len_ = p - start;
       break;
     }
 yy97:

@@ -33,9 +33,10 @@ ManifestParser::ManifestParser(State* state, FileReader* file_reader,
 
 bool ManifestParser::Load(const string& filename, string* err, Lexer* parent) {
   METRIC_RECORD(".ninja parse");
-  string contents;
+  // Let this leak.
+  string* contents = new string;
   string read_err;
-  if (!file_reader_->ReadFile(filename, &contents, &read_err)) {
+  if (!file_reader_->ReadFile(filename, contents, &read_err)) {
     *err = "loading '" + filename + "': " + read_err;
     if (parent)
       parent->Error(string(*err), err);
@@ -47,9 +48,9 @@ bool ManifestParser::Load(const string& filename, string* err, Lexer* parent) {
   // string::data().  data()'s return value isn't guaranteed to be
   // null-terminated (although in practice - libc++, libstdc++, msvc's stl --
   // it is, and C++11 demands that too), so add an explicit nul byte.
-  contents.resize(contents.size() + 1);
+  contents->resize(contents->size() + 1);
 
-  return Parse(filename, contents, err);
+  return Parse(filename, *contents, err);
 }
 
 bool ManifestParser::Parse(const string& filename, const string& input,
@@ -77,7 +78,7 @@ bool ManifestParser::Parse(const string& filename, const string& input,
       break;
     case Lexer::IDENT: {
       lexer_.UnreadToken();
-      string name;
+      StringPiece name;
       EvalString let_value;
       if (!ParseLet(&name, &let_value, err))
         return false;
@@ -114,7 +115,7 @@ bool ManifestParser::Parse(const string& filename, const string& input,
 
 
 bool ManifestParser::ParsePool(string* err) {
-  string name;
+  StringPiece name;
   if (!lexer_.ReadIdent(&name))
     return lexer_.Error("expected pool name", err);
 
@@ -122,12 +123,12 @@ bool ManifestParser::ParsePool(string* err) {
     return false;
 
   if (state_->LookupPool(name) != NULL)
-    return lexer_.Error("duplicate pool '" + name + "'", err);
+    return lexer_.Error("duplicate pool '" + name.AsString() + "'", err);
 
   int depth = -1;
 
   while (lexer_.PeekToken(Lexer::INDENT)) {
-    string key;
+    StringPiece key;
     EvalString value;
     if (!ParseLet(&key, &value, err))
       return false;
@@ -138,20 +139,20 @@ bool ManifestParser::ParsePool(string* err) {
       if (depth < 0)
         return lexer_.Error("invalid pool depth", err);
     } else {
-      return lexer_.Error("unexpected variable '" + key + "'", err);
+      return lexer_.Error("unexpected variable '" + key.AsString() + "'", err);
     }
   }
 
   if (depth < 0)
     return lexer_.Error("expected 'depth =' line", err);
 
-  state_->AddPool(new Pool(name, depth));
+  state_->AddPool(new Pool(name.AsString(), depth));
   return true;
 }
 
 
 bool ManifestParser::ParseRule(string* err) {
-  string name;
+  StringPiece name;
   if (!lexer_.ReadIdent(&name))
     return lexer_.Error("expected rule name", err);
 
@@ -159,12 +160,12 @@ bool ManifestParser::ParseRule(string* err) {
     return false;
 
   if (env_->LookupRuleCurrentScope(name) != NULL)
-    return lexer_.Error("duplicate rule '" + name + "'", err);
+    return lexer_.Error("duplicate rule '" + name.AsString() + "'", err);
 
   Rule* rule = new Rule(name);  // XXX scoped_ptr
 
   while (lexer_.PeekToken(Lexer::INDENT)) {
-    string key;
+    StringPiece key;
     EvalString value;
     if (!ParseLet(&key, &value, err))
       return false;
@@ -174,7 +175,7 @@ bool ManifestParser::ParseRule(string* err) {
     } else {
       // Die on other keyvals for now; revisit if we want to add a
       // scope here.
-      return lexer_.Error("unexpected variable '" + key + "'", err);
+      return lexer_.Error("unexpected variable '" + key.AsString() + "'", err);
     }
   }
 
@@ -191,7 +192,8 @@ bool ManifestParser::ParseRule(string* err) {
   return true;
 }
 
-bool ManifestParser::ParseLet(string* key, EvalString* value, string* err) {
+bool ManifestParser::ParseLet(StringPiece* key, EvalString* value,
+                              string* err) {
   if (!lexer_.ReadIdent(key))
     return lexer_.Error("expected variable name", err);
   if (!ExpectToken(Lexer::EQUALS, err))
@@ -250,13 +252,14 @@ bool ManifestParser::ParseEdge(string* err) {
   if (!ExpectToken(Lexer::COLON, err))
     return false;
 
-  string rule_name;
+  StringPiece rule_name;
   if (!lexer_.ReadIdent(&rule_name))
     return lexer_.Error("expected build command name", err);
 
   const Rule* rule = env_->LookupRule(rule_name);
   if (!rule)
-    return lexer_.Error("unknown build rule '" + rule_name + "'", err);
+    return lexer_.Error("unknown build rule '" + rule_name.AsString() + "'",
+                        err);
 
   for (;;) {
     // XXX should we require one path here?
@@ -303,12 +306,13 @@ bool ManifestParser::ParseEdge(string* err) {
   bool has_indent_token = lexer_.PeekToken(Lexer::INDENT);
   BindingEnv* env = has_indent_token ? new BindingEnv(env_) : env_;
   while (has_indent_token) {
-    string key;
+    StringPiece key;
     EvalString val;
     if (!ParseLet(&key, &val, err))
       return false;
 
-    env->AddBinding(key, val.Evaluate(env_));
+    // An intentional memory leak.
+    env->AddBinding(key, *new string(val.Evaluate(env_)));
     has_indent_token = lexer_.PeekToken(Lexer::INDENT);
   }
 

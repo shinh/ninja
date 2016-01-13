@@ -45,10 +45,11 @@ void GraphViz::AddTarget(Node* node) {
     // Note extra space before label text -- this is cosmetic and feels
     // like a graphviz bug.
     printf("\"%p\" -> \"%p\" [label=\" %s\"]\n",
-           edge->inputs_[0], edge->outputs_[0], edge->rule_->name().c_str());
+           edge->inputs_[0], edge->outputs_[0],
+           edge->rule_->name().AsString().c_str());
   } else {
     printf("\"%p\" [label=\"%s\", shape=ellipse]\n",
-           edge, edge->rule_->name().c_str());
+           edge, edge->rule_->name().AsString().c_str());
     for (vector<Node*>::iterator out = edge->outputs_.begin();
          out != edge->outputs_.end(); ++out) {
       printf("\"%p\" -> \"%p\"\n", edge, *out);

@@ -218,7 +218,7 @@ struct EdgeEnv : public Env {
 
   EdgeEnv(Edge* edge, EscapeKind escape)
       : edge_(edge), escape_in_out_(escape), recursive_(false) {}
-  virtual string LookupVariable(const string& var);
+  virtual string LookupVariable(StringPiece var);
 
   /// Given a span of Nodes, construct a list of paths suitable for a command
   /// line.
@@ -227,13 +227,13 @@ struct EdgeEnv : public Env {
                       char sep);
 
  private:
-  vector<string> lookups_;
+  vector<StringPiece> lookups_;
   Edge* edge_;
   EscapeKind escape_in_out_;
   bool recursive_;
 };
 
-string EdgeEnv::LookupVariable(const string& var) {
+string EdgeEnv::LookupVariable(StringPiece var) {
   if (var == "in" || var == "in_newline") {
     int explicit_deps_count = edge_->inputs_.size() - edge_->implicit_deps_ -
       edge_->order_only_deps_;
@@ -247,12 +247,12 @@ string EdgeEnv::LookupVariable(const string& var) {
   }
 
   if (recursive_) {
-    vector<string>::const_iterator it;
+    vector<StringPiece>::const_iterator it;
     if ((it = find(lookups_.begin(), lookups_.end(), var)) != lookups_.end()) {
       string cycle;
       for (; it != lookups_.end(); ++it)
-        cycle.append(*it + " -> ");
-      cycle.append(var);
+        cycle.append(it->AsString() + " -> ");
+      cycle.append(var.str_, var.len_);
       Fatal(("cycle in rule variables: " + cycle).c_str());
     }
   }
@@ -324,7 +324,7 @@ void Edge::Dump(const char* prefix) const {
        i != inputs_.end() && *i != NULL; ++i) {
     printf("%s ", (*i)->path().c_str());
   }
-  printf("--%s-> ", rule_->name().c_str());
+  printf("--%s-> ", rule_->name().AsString().c_str());
   for (vector<Node*>::const_iterator i = outputs_.begin();
        i != outputs_.end() && *i != NULL; ++i) {
     printf("%s ", (*i)->path().c_str());

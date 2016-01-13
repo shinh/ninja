@@ -180,13 +180,14 @@ void Lexer::EatWhitespace() {
   }
 }
 
-bool Lexer::ReadIdent(string* out) {
+bool Lexer::ReadIdent(StringPiece* out) {
   const char* p = ofs_;
   for (;;) {
     const char* start = p;
     /*!re2c
     varname {
-      out->assign(start, p - start);
+      out->str_ = start;
+      out->len_ = p - start;
       break;
     }
     [^] { return false; }
